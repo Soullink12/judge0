@@ -50,3 +50,7 @@ LABEL version=$JUDGE0_VERSION
 FROM production AS development
 
 CMD ["sleep", "infinity"]
+FROM judge0/api:latest
+
+# Expose Judge0 API port
+EXPOSE 2358
