@@ -1,0 +1,1053 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeCraft Pro - Advanced Online Compiler</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <!-- Monaco Editor Loader -->
+    <script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs/loader.js"></script>
+
+    <style>
+        :root {
+            --font-main: 'Inter', sans-serif;
+            --font-mono: 'Roboto Mono', monospace;
+            --bg-light: #f1f5f9; /* Lighter slate */
+            --bg-dark: #020617; /* Darker slate */
+            --panel-light: #ffffff;
+            --panel-dark: #1e293b;
+            --accent: #4f46e5;
+            --accent-hover: #4338ca;
+        }
+        html.dark { color-scheme: dark; }
+        body {
+            font-family: var(--font-main);
+            background-color: var(--bg-dark);
+            color: #1e293b;
+            overflow: hidden;
+            background-image: radial-gradient(circle at 1px 1px, #475569 1px, transparent 0);
+            background-size: 20px 20px;
+        }
+        html.dark body {
+            background-color: var(--bg-dark);
+            color: #e2e8f0;
+        }
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        html.dark .glass-panel {
+            background: rgba(30, 41, 59, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        .btn { transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1); }
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+        }
+        .tab-btn { position: relative; transition: color 0.3s ease; }
+        .tab-btn::after {
+            content: ''; position: absolute; bottom: -1px; left: 0;
+            width: 100%; height: 2px; background-color: var(--accent);
+            transform: scaleX(0); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-origin: center;
+        }
+        .tab-active { color: var(--accent); }
+        .tab-active::after { transform: scaleX(1); }
+        #editor-container { border-radius: 0.75rem; overflow: hidden; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+        html.dark ::-webkit-scrollbar-thumb { background: #475569; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+
+        /* Animations */
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        .fade-in { animation: fadeIn 0.3s ease-out forwards; }
+        @keyframes fadeOut { from { opacity: 1; transform: scale(1); } to { opacity: 0; transform: scale(0.95); } }
+        .fade-out { animation: fadeOut 0.3s ease-out forwards; }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner { animation: spin 1s linear infinite; }
+
+        /* Resizable Gutter */
+        #resize-handle {
+            background-color: transparent;
+            cursor: col-resize;
+            width: 8px;
+            position: relative;
+        }
+        #resize-handle:hover::after, #resize-handle.resizing::after {
+             opacity: 1;
+        }
+        #resize-handle::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 40px;
+            background-color: var(--accent);
+            border-radius: 2px;
+            opacity: 0;
+            transition: opacity 0.2s ease;
+        }
+        
+        /* Preloader */
+        #preloader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-dark);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: opacity 0.3s ease;
+        }
+        #preloader.loaded {
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div id="preloader">
+        <div class="spinner w-12 h-12 border-4 border-slate-500 border-t-indigo-500 rounded-full"></div>
+    </div>
+
+    <div id="app-container" class="flex flex-col h-screen bg-slate-100 dark:bg-slate-900 transition-colors">
+        <!-- Header -->
+        <header class="flex-shrink-0 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm border-b border-slate-200 dark:border-slate-700 p-3 flex justify-between items-center z-20 shadow-md">
+            <div class="flex items-center gap-3">
+                <i class="fas fa-rocket text-2xl text-indigo-500"></i>
+                <h1 class="text-xl font-bold tracking-tight">CodeCraft Pro</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <select id="language-selector" class="bg-slate-200 dark:bg-slate-700 rounded-md px-3 py-1.5 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-indigo-500 transition" aria-label="Select Language"></select>
+                <button id="settings-btn" class="btn p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700" title="Settings" aria-label="Open Settings">
+                    <i class="fas fa-cog"></i>
+                </button>
+                <button id="theme-toggle" class="btn p-2 rounded-full hover:bg-slate-200 dark:hover:bg-slate-700" title="Toggle Theme" aria-label="Toggle Dark/Light Theme">
+                    <i class="fas fa-moon"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main id="main-content" class="flex-grow flex p-4 gap-4 overflow-hidden">
+            <!-- Left Panel: Code Editor and Controls -->
+            <div id="left-panel" class="flex flex-col h-full gap-2">
+                <div class="flex-shrink-0 flex items-center flex-wrap gap-3 p-2 bg-white/80 dark:bg-slate-800/80 backdrop-blur-sm rounded-lg border border-slate-200 dark:border-slate-700">
+                    <button id="run-btn" class="btn bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2 px-5 rounded-md flex items-center gap-2" title="Run Code (Ctrl+Enter)">
+                        <i class="fas fa-play"></i> Run
+                        <span id="loading-spinner" class="hidden spinner w-4 h-4 border-2 border-white border-t-transparent rounded-full"></span>
+                    </button>
+                    <button id="copy-btn" class="btn bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 font-medium py-2 px-4 rounded-md" title="Copy Code" aria-label="Copy Code"><i class="fas fa-copy"></i></button>
+                    <button id="share-btn" class="btn bg-teal-500 hover:bg-teal-600 text-white font-medium py-2 px-4 rounded-md" title="Share Code" aria-label="Share Code"><i class="fas fa-share-alt"></i></button>
+                    <div class="flex-grow"></div>
+                    <button id="save-btn" class="btn bg-green-500 hover:bg-green-600 text-white font-medium py-2 px-4 rounded-md" title="Save to Browser (Ctrl+S)" aria-label="Save Code"><i class="fas fa-save"></i> Save</button>
+                    <button id="load-btn" class="btn bg-blue-500 hover:bg-blue-600 text-white font-medium py-2 px-4 rounded-md" title="Load Code" aria-label="Load Code"><i class="fas fa-folder-open"></i> Load</button>
+                    <button id="clear-btn" class="btn bg-red-500 hover:bg-red-600 text-white font-medium py-2 px-4 rounded-md" title="Clear Editor" aria-label="Clear Editor"><i class="fas fa-eraser"></i> Clear</button>
+                    <button id="download-btn" class="btn bg-yellow-500 hover:bg-yellow-600 text-white font-medium py-2 px-4 rounded-md" title="Download Code" aria-label="Download Code"><i class="fas fa-download"></i></button>
+                    <button id="fullscreen-btn" class="btn bg-slate-600 hover:bg-slate-700 text-white font-medium py-2 px-4 rounded-md" title="Toggle Fullscreen" aria-label="Toggle Fullscreen"><i class="fas fa-expand"></i></button>
+                    <input type="file" id="file-uploader" class="hidden">
+                </div>
+                <div class="flex-grow relative shadow-2xl shadow-slate-900/20 rounded-lg">
+                    <div id="editor-container" class="absolute inset-0"></div>
+                </div>
+            </div>
+            
+            <!-- Gutter for resizing -->
+            <div id="resize-handle" class="flex-shrink-0"></div>
+
+            <!-- Right Panel: Input, Output, History -->
+            <div id="right-panel" class="flex flex-col glass-panel rounded-lg shadow-lg h-full overflow-hidden flex-grow">
+                <div class="flex border-b border-slate-200/50 dark:border-slate-700/50">
+                    <button class="tab-btn tab-active flex-1 p-3 font-semibold text-sm" data-tab="input-panel">Input</button>
+                    <button class="tab-btn flex-1 p-3 font-semibold text-sm" data-tab="output-panel">Output</button>
+                    <button class="tab-btn flex-1 p-3 font-semibold text-sm" data-tab="history-panel">History</button>
+                </div>
+                <div class="flex-grow p-1 overflow-hidden">
+                    <div class="p-3 h-full overflow-y-auto">
+                        <div id="input-panel" class="tab-content h-full">
+                            <textarea id="input-box" class="w-full h-full bg-slate-100/50 dark:bg-slate-900/50 rounded-md p-2 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-500 font-mono text-sm" placeholder="Enter custom input here..."></textarea>
+                        </div>
+                        <div id="output-panel" class="tab-content hidden h-full">
+                            <div id="output-details" class="text-xs mb-2 flex flex-wrap gap-x-4 items-center p-2 bg-slate-200/50 dark:bg-slate-900/50 rounded-md">
+                                <span>Status: <strong id="status" class="font-semibold">Idle</strong></span>
+                                <span>Time: <strong id="time" class="font-semibold">N/A</strong></span>
+                                <span>Memory: <strong id="memory" class="font-semibold">N/A</strong></span>
+                            </div>
+                            <pre id="output-console" aria-live="polite" class="w-full h-[calc(100%-2.5rem)] bg-slate-900 text-white rounded-md p-3 text-sm overflow-auto whitespace-pre-wrap break-words font-mono"></pre>
+                        </div>
+                        <div id="history-panel" class="tab-content hidden h-full flex flex-col">
+                            <div class="flex-shrink-0 text-right mb-2">
+                                <button id="clear-history-btn" class="btn text-xs bg-red-500/80 hover:bg-red-600/80 text-white font-medium py-1 px-3 rounded-md">
+                                    <i class="fas fa-trash-alt mr-1"></i> Clear History
+                                </button>
+                            </div>
+                            <ul id="history-list" class="space-y-2 flex-grow overflow-y-auto"></ul>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settings-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
+        <div class="glass-panel w-full max-w-md p-6 rounded-lg shadow-2xl m-4">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-2xl font-bold">Settings</h2>
+                <button id="close-settings-btn" class="p-2 rounded-full hover:bg-slate-200/50 dark:hover:bg-slate-700/50 text-2xl" aria-label="Close Settings">&times;</button>
+            </div>
+            <div class="space-y-6">
+                <div>
+                    <label for="theme-selector" class="block mb-2 text-sm font-medium">Editor Theme</label>
+                    <select id="theme-selector" class="w-full bg-slate-200 dark:bg-slate-700 rounded-md px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-indigo-500"></select>
+                </div>
+                <div>
+                    <label for="font-size-slider" class="block mb-2 text-sm font-medium">Font Size: <span id="font-size-value">14</span>px</label>
+                    <input id="font-size-slider" type="range" min="10" max="24" value="14" class="w-full h-2 bg-slate-200 dark:bg-slate-700 rounded-lg appearance-none cursor-pointer">
+                </div>
+                 <div>
+                    <p class="text-sm text-center text-slate-600 dark:text-slate-300">
+                        Powered by <a href="https://paiza.io/" target="_blank" class="text-indigo-500 hover:underline">Paiza.IO API</a>.
+                    </p>
+                 </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div id="confirm-modal" class="fixed inset-0 bg-black/60 z-50 flex items-center justify-center hidden">
+        <div class="glass-panel w-full max-w-sm p-6 rounded-lg shadow-2xl m-4">
+            <h3 id="confirm-title" class="text-lg font-bold mb-4">Are you sure?</h3>
+            <p id="confirm-message" class="text-sm mb-6">This action cannot be undone.</p>
+            <div class="flex justify-end gap-4">
+                <button id="confirm-cancel-btn" class="btn bg-slate-200 dark:bg-slate-700 hover:bg-slate-300 dark:hover:bg-slate-600 font-medium py-2 px-4 rounded-md">Cancel</button>
+                <button id="confirm-ok-btn" class="btn bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-md">Confirm</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" aria-live="assertive" class="fixed bottom-5 right-5 flex items-center gap-3 text-white py-2 px-5 rounded-lg shadow-xl translate-x-[120%] transition-transform duration-300">
+        <i id="toast-icon" class="fa"></i>
+        <p id="toast-message"></p>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+
+            // --- CONFIGURATION ---
+            const CONFIG = {
+                defaultLanguage: 'python',
+                autosaveInterval: 2000, // ms
+                languages: {
+                    'c': { paizaId: 'c', name: 'C', extension: 'c', defaultCode: '#include <stdio.h>\n\nint main() {\n    printf("Hello, World!");\n    return 0;\n}' },
+                    'cpp': { paizaId: 'cpp', name: 'C++', extension: 'cpp', defaultCode: '#include <iostream>\n\nint main() {\n    std::cout << "Hello, World!";\n    return 0;\n}' },
+                    'java': { paizaId: 'java', name: 'Java', extension: 'java', defaultCode: 'public class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello, World!");\n    }\n}' },
+                    'python': { paizaId: 'python3', name: 'Python 3', extension: 'py', defaultCode: 'print("Hello, World!")' },
+                    'javascript': { paizaId: 'nodejs', name: 'JavaScript (Node.js)', extension: 'js', defaultCode: 'console.log("Hello, World!");' },
+                    'php': { paizaId: 'php', name: 'PHP', extension: 'php', defaultCode: '<?php\n\necho "Hello, World!";' },
+                    'ruby': { paizaId: 'ruby', name: 'Ruby', extension: 'rb', defaultCode: 'puts "Hello, World!"' },
+                    'go': { paizaId: 'go', name: 'Go', extension: 'go', defaultCode: 'package main\n\nimport "fmt"\n\nfunc main() {\n    fmt.Println("Hello, World!")\n}' },
+                    'swift': { paizaId: 'swift', name: 'Swift', extension: 'swift', defaultCode: 'print("Hello, World!")' },
+                    'rust': { paizaId: 'rust', name: 'Rust', extension: 'rs', defaultCode: 'fn main() {\n    println!("Hello, World!");\n}' },
+                    'typescript': { paizaId: 'typescript', name: 'TypeScript', extension: 'ts', defaultCode: 'console.log("Hello, World!");' },
+                    'kotlin': { paizaId: 'kotlin', name: 'Kotlin', extension: 'kt', defaultCode: 'fun main() {\n    println("Hello, World!")\n}' },
+                },
+                themes: {
+                    'vs-dark': 'Visual Studio Dark',
+                    'vs': 'Visual Studio Light',
+                    'hc-black': 'High Contrast Black',
+                    // 'monokai': 'Monokai', // These themes might require monaco.editor.defineTheme and additional setup.
+                    // 'solarized-dark': 'Solarized Dark',
+                    // 'solarized-light': 'Solarized Light',
+                }
+            };
+
+            /**
+             * Manages all interactions with the DOM.
+             */
+            class UIManager {
+                constructor() {
+                    this.elements = this.cacheElements();
+                    this.isResizing = false;
+                }
+
+                cacheElements() {
+                    const $ = (selector) => document.querySelector(selector);
+                    return {
+                        preloader: $('#preloader'),
+                        appContainer: $('#app-container'),
+                        languageSelector: $('#language-selector'),
+                        themeSelector: $('#theme-selector'),
+                        themeToggle: $('#theme-toggle'),
+                        runBtn: $('#run-btn'),
+                        copyBtn: $('#copy-btn'),
+                        shareBtn: $('#share-btn'),
+                        clearBtn: $('#clear-btn'),
+                        saveBtn: $('#save-btn'),
+                        loadBtn: $('#load-btn'),
+                        downloadBtn: $('#download-btn'),
+                        fullscreenBtn: $('#fullscreen-btn'),
+                        fileUploader: $('#file-uploader'),
+                        inputBox: $('#input-box'),
+                        outputConsole: $('#output-console'),
+                        statusEl: $('#status'),
+                        timeEl: $('#time'),
+                        memoryEl: $('#memory'),
+                        loadingSpinner: $('#loading-spinner'),
+                        historyList: $('#history-list'),
+                        clearHistoryBtn: $('#clear-history-btn'),
+                        tabButtons: document.querySelectorAll('.tab-btn'),
+                        tabContents: document.querySelectorAll('.tab-content'),
+                        settingsBtn: $('#settings-btn'),
+                        settingsModal: $('#settings-modal'),
+                        closeSettingsBtn: $('#close-settings-btn'),
+                        fontSizeSlider: $('#font-size-slider'),
+                        fontSizeValue: $('#font-size-value'),
+                        toast: $('#toast'),
+                        toastIcon: $('#toast-icon'),
+                        toastMessage: $('#toast-message'),
+                        resizeHandle: $('#resize-handle'),
+                        leftPanel: $('#left-panel'),
+                        rightPanel: $('#right-panel'),
+                        confirmModal: $('#confirm-modal'),
+                        confirmTitle: $('#confirm-title'),
+                        confirmMessage: $('#confirm-message'),
+                        confirmOkBtn: $('#confirm-ok-btn'),
+                        confirmCancelBtn: $('#confirm-cancel-btn'),
+                    };
+                }
+
+                populateSelect(element, options, defaultValue) {
+                    // Determine if options is an object with 'name' properties (like languages)
+                    // or just a mapping of key-to-display-name (like themes)
+                    const isLanguageOptions = Object.values(options).some(opt => typeof opt === 'object' && opt !== null && 'name' in opt);
+
+                    for (const key in options) {
+                        const displayValue = isLanguageOptions ? options[key].name : options[key];
+                        const option = new Option(displayValue, key);
+                        element.add(option);
+                    }
+                    element.value = defaultValue;
+                }
+
+                setLoading(element, isLoading) {
+                    element.disabled = isLoading;
+                    const spinner = element.querySelector('.spinner');
+                    if (spinner) {
+                        spinner.classList.toggle('hidden', !isLoading);
+                    }
+                }
+
+                updateOutputDetails(result) {
+                    const statusDesc = result.status || 'Idle';
+                    this.elements.statusEl.textContent = statusDesc.charAt(0).toUpperCase() + statusDesc.slice(1);
+                    this.elements.timeEl.textContent = result.time ? `${result.time}s` : 'N/A';
+                    this.elements.memoryEl.textContent = result.memory ? `${(result.memory / 1024).toFixed(2)} MB` : 'N/A';
+                    
+                    this.elements.statusEl.className = 'font-semibold'; // Reset classes
+                    if (result.result === 'success') this.elements.statusEl.classList.add('text-green-500');
+                    else if (result.result === 'failure' || result.result === 'error') this.elements.statusEl.classList.add('text-red-500');
+                }
+
+                displayOutput(result) {
+                    let output = result.stdout || '';
+                    if (result.stderr) output += `\n--- STDERR ---\n${result.stderr}`;
+                    if (result.build_stderr) output += `\n--- BUILD ERROR ---\n${result.build_stderr}`;
+                    this.elements.outputConsole.textContent = output || 'Execution finished with no output.';
+                    this.updateOutputDetails(result);
+                }
+
+                showToast(message, type = 'success', duration = 3000) {
+                    const icons = { success: 'fa-check-circle', error: 'fa-times-circle', info: 'fa-info-circle' };
+                    const colors = { success: 'bg-green-500', error: 'bg-red-500', info: 'bg-blue-500' };
+
+                    this.elements.toastMessage.textContent = message;
+                    this.elements.toastIcon.className = `fa ${icons[type]}`;
+                    this.elements.toast.className = `fixed bottom-5 right-5 flex items-center gap-3 text-white py-2 px-5 rounded-lg shadow-xl transition-transform duration-300 ${colors[type]}`;
+                    
+                    this.elements.toast.style.transform = 'translateX(0)';
+                    setTimeout(() => {
+                        this.elements.toast.style.transform = 'translateX(120%)';
+                    }, duration);
+                }
+                
+                switchTab(tabId) {
+                    this.elements.tabButtons.forEach(btn => btn.classList.toggle('tab-active', btn.dataset.tab === tabId));
+                    this.elements.tabContents.forEach(content => content.classList.toggle('hidden', content.id !== tabId));
+                }
+
+                toggleModal(modalElement, show) {
+                    if (show) {
+                        modalElement.classList.remove('hidden');
+                        modalElement.classList.remove('fade-out'); // Ensure fade-out is removed if present
+                        modalElement.classList.add('fade-in');
+                    } else {
+                        modalElement.classList.remove('fade-in');
+                        modalElement.classList.add('fade-out');
+                        setTimeout(() => {
+                            modalElement.classList.add('hidden');
+                            modalElement.classList.remove('fade-out'); // Clean up fade-out class after transition
+                        }, 300); // Duration of fadeOut animation
+                    }
+                }
+
+                renderHistory(history, languages) {
+                    this.elements.historyList.innerHTML = history.length === 0
+                        ? '<li class="text-slate-500 text-center p-4">No execution history.</li>'
+                        : history.map(item => `
+                            <li class="p-3 rounded-md hover:bg-slate-200/50 dark:hover:bg-slate-700/50 cursor-pointer transition-colors" data-code="${this.encodeForHtml(item.code)}" data-lang="${item.langKey}">
+                                <div class="flex justify-between items-center">
+                                    <span class="font-semibold text-sm">${languages[item.langKey]?.name || 'Unknown'}</span>
+                                    <span class="text-xs ${item.status === 'Success' ? 'text-green-500' : 'text-red-500'}">${item.status}</span>
+                                </div>
+                                <span class="text-xs text-slate-500 dark:text-slate-400">${item.time}</span>
+                            </li>
+                        `).join('');
+                }
+                
+                encodeForHtml(str) {
+                    return btoa(unescape(encodeURIComponent(str)));
+                }
+
+                decodeFromHtml(str) {
+                    return decodeURIComponent(escape(atob(str)));
+                }
+            }
+
+            /**
+             * Manages the Monaco Editor instance.
+             */
+            class EditorManager {
+                constructor(containerId, uiManager) {
+                    this.containerId = containerId;
+                    this.uiManager = uiManager;
+                    this.editor = null;
+                    this.autosaveTimer = null;
+                }
+
+                init(config, onContentChange) {
+                    return new Promise((resolve) => {
+                        require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.34.1/min/vs' } });
+                        require(['vs/editor/editor.main'], () => {
+                            this.editor = monaco.editor.create(document.getElementById(this.containerId), {
+                                value: config.languages[config.defaultLanguage].defaultCode,
+                                language: config.defaultLanguage,
+                                theme: 'vs-dark',
+                                automaticLayout: true,
+                                fontSize: 14,
+                                fontFamily: 'var(--font-mono)',
+                                minimap: { enabled: true },
+                                scrollBeyondLastLine: false,
+                                roundedSelection: false,
+                                wordWrap: 'on',
+                            });
+                            
+                            this.editor.onDidChangeModelContent(() => {
+                                clearTimeout(this.autosaveTimer);
+                                this.autosaveTimer = setTimeout(onContentChange, CONFIG.autosaveInterval);
+                            });
+                            
+                            resolve(this.editor);
+                        });
+                    });
+                }
+
+                changeLanguage(langKey, defaultCode) {
+                    monaco.editor.setModelLanguage(this.editor.getModel(), langKey);
+                    this.editor.setValue(defaultCode);
+                }
+                
+                updateOptions(options) {
+                    this.editor.updateOptions(options);
+                }
+            }
+
+            /**
+             * Handles API interactions with Paiza.IO.
+             */
+            class ApiClient {
+                constructor() {
+                    this.API_URL = 'https://api.paiza.io';
+                    this.API_KEY = 'guest'; // Note: 'guest' key has limitations and rate limits.
+                }
+
+                /**
+                 * Makes an API request with exponential backoff for retries.
+                 * @param {string} endpoint - The API endpoint.
+                 * @param {object} options - Fetch options.
+                 * @param {number} retries - Current retry count.
+                 * @returns {Promise<object>} The JSON response.
+                 */
+                async _request(endpoint, options = {}, retries = 0) {
+                    const maxRetries = 5; // Max retries for transient errors
+                    const baseDelay = 1000; // Base delay in milliseconds (1 second)
+
+                    try {
+                        const response = await fetch(`${this.API_URL}${endpoint}`, options);
+                        
+                        // Check if the response indicates a retriable error (e.g., 5xx, 429 Too Many Requests)
+                        if (!response.ok && (response.status >= 500 || response.status === 429) && retries < maxRetries) {
+                            const delay = Math.pow(2, retries) * baseDelay + Math.random() * baseDelay; // Exponential backoff with jitter
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            return this._request(endpoint, options, retries + 1); // Retry the request
+                        }
+
+                        // If response is not OK and not a retriable error, or max retries reached
+                        if (!response.ok) {
+                            const errorData = await response.json().catch(() => ({ error: 'Unknown API error' }));
+                            throw new Error(`API Error (${response.status}): ${errorData.error || response.statusText}`);
+                        }
+                        
+                        return response.json();
+                    } catch (e) {
+                        // Catch network errors (e.g., TypeError for network issues) and retry
+                        if (e instanceof TypeError && retries < maxRetries) {
+                            const delay = Math.pow(2, retries) * baseDelay + Math.random() * baseDelay;
+                            await new Promise(resolve => setTimeout(resolve, delay));
+                            return this._request(endpoint, options, retries + 1);
+                        }
+                        throw e; // Re-throw if it's not a retriable error or max retries reached
+                    }
+                }
+
+                async execute(language, sourceCode, stdin) {
+                    // Step 1: Create the submission
+                    const createParams = new URLSearchParams({
+                        source_code: sourceCode,
+                        language: language,
+                        input: stdin,
+                        api_key: this.API_KEY,
+                    });
+
+                    const createResponse = await this._request('/runners/create', {
+                        method: 'POST',
+                        body: createParams,
+                    });
+
+                    const submissionId = createResponse.id;
+                    if (!submissionId) {
+                        throw new Error("Failed to create submission. No ID returned.");
+                    }
+
+                    // Step 2: Poll for the result until it's completed or timeout
+                    let status = '';
+                    let result = {};
+                    const maxPollRetries = 15; // Max 15 polls, each 1 second apart = 15 seconds timeout
+                    let pollRetries = 0;
+
+                    while (status !== 'completed' && pollRetries < maxPollRetries) {
+                        await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second between polls
+                        
+                        // Use _request with retries for polling itself
+                        const detailsResponse = await this._request(`/runners/get_details?id=${submissionId}&api_key=${this.API_KEY}`);
+                        status = detailsResponse.status;
+                        result = detailsResponse;
+                        pollRetries++;
+                    }
+
+                    if (status !== 'completed') {
+                        throw new Error("Execution timed out or failed to complete.");
+                    }
+                    
+                    return result;
+                }
+            }
+            
+            /**
+             * Manages application state and storage.
+             */
+            class StateManager {
+                constructor() {
+                    this.storage = {
+                        local: this.getStorage('localStorage'),
+                        session: this.getStorage('sessionStorage')
+                    };
+                }
+
+                getStorage(type) {
+                    try {
+                        const storage = window[type];
+                        const x = '__storage_test__';
+                        storage.setItem(x, x);
+                        storage.removeItem(x);
+                        return storage;
+                    } catch (e) {
+                        console.warn(`${type} is not available. Some features might not work.`);
+                        return { getItem: () => null, setItem: () => {}, removeItem: () => {} }; // Fallback to a dummy storage
+                    }
+                }
+
+                get(key, storageType = 'local') {
+                    const value = this.storage[storageType].getItem(key);
+                    try {
+                        return value ? JSON.parse(value) : null;
+                    } catch {
+                        return value; // Return raw value if JSON parsing fails
+                    }
+                }
+
+                set(key, value, storageType = 'local') {
+                    this.storage[storageType].setItem(key, JSON.stringify(value));
+                }
+                
+                remove(key, storageType = 'local') {
+                    this.storage[storageType].removeItem(key);
+                }
+            }
+
+            /**
+             * Main application class.
+             */
+            class App {
+                constructor() {
+                    this.ui = new UIManager();
+                    this.state = new StateManager();
+                    this.editorManager = new EditorManager('editor-container', this.ui);
+                    this.apiClient = new ApiClient();
+                    this.config = CONFIG;
+                }
+
+                async init() {
+                    // Populate language and theme selectors
+                    this.ui.populateSelect(this.ui.elements.languageSelector, this.config.languages, this.config.defaultLanguage);
+                    this.ui.populateSelect(this.ui.elements.themeSelector, this.config.themes, 'vs-dark');
+                    
+                    // Initialize Monaco Editor
+                    await this.editorManager.init(this.config, () => this.handleCodeChange());
+                    
+                    // Bind all event listeners
+                    this.bindEvents();
+                    // Apply saved user settings and preferences
+                    this.applyInitialSettings();
+                    // Check for code shared via URL
+                    this.loadFromURL();
+                    
+                    // Hide preloader once app is ready
+                    this.ui.elements.preloader.classList.add('loaded');
+                }
+                
+                bindEvents() {
+                    // Header controls
+                    this.ui.elements.languageSelector.addEventListener('change', () => this.handleLanguageChange());
+                    this.ui.elements.themeToggle.addEventListener('click', () => this.toggleAppTheme());
+                    this.ui.elements.settingsBtn.addEventListener('click', () => this.ui.toggleModal(this.ui.elements.settingsModal, true));
+
+                    // Action buttons
+                    this.ui.elements.runBtn.addEventListener('click', () => this.executeCode());
+                    this.ui.elements.copyBtn.addEventListener('click', () => this.copyCode());
+                    this.ui.elements.shareBtn.addEventListener('click', () => this.shareCode());
+                    this.ui.elements.saveBtn.addEventListener('click', () => this.saveCode(true));
+                    this.ui.elements.loadBtn.addEventListener('click', () => this.ui.elements.fileUploader.click());
+                    this.ui.elements.fileUploader.addEventListener('change', (e) => this.loadFile(e));
+                    this.ui.elements.clearBtn.addEventListener('click', () => this.clearEditor());
+                    this.ui.elements.downloadBtn.addEventListener('click', () => this.downloadCode());
+                    this.ui.elements.fullscreenBtn.addEventListener('click', () => this.toggleFullscreen());
+                    
+                    // Right panel tabs
+                    this.ui.elements.tabButtons.forEach(button => {
+                        button.addEventListener('click', () => this.ui.switchTab(button.dataset.tab));
+                    });
+                    
+                    // History list
+                    this.ui.elements.historyList.addEventListener('click', (e) => this.loadFromHistory(e));
+                    this.ui.elements.clearHistoryBtn.addEventListener('click', () => this.clearHistory());
+                    
+                    // Settings modal
+                    this.ui.elements.closeSettingsBtn.addEventListener('click', () => this.ui.toggleModal(this.ui.elements.settingsModal, false));
+                    this.ui.elements.themeSelector.addEventListener('change', (e) => this.handleThemeChange(e));
+                    this.ui.elements.fontSizeSlider.addEventListener('input', (e) => this.handleFontSizeChange(e));
+
+                    // Keyboard shortcuts
+                    document.addEventListener('keydown', (e) => {
+                        if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); this.executeCode(); }
+                        if (e.ctrlKey && e.key === 's') { e.preventDefault(); this.saveCode(true); }
+                    });
+
+                    // Fullscreen change detection
+                    document.addEventListener('fullscreenchange', () => this.updateFullscreenIcon());
+
+                    // Resizable layout
+                    this.ui.elements.resizeHandle.addEventListener('mousedown', this.startResize.bind(this));
+                }
+                
+                applyInitialSettings() {
+                    // App theme (dark/light mode for the whole app)
+                    const isDark = this.state.get('isDarkTheme') ?? true; // Default to dark theme
+                    document.documentElement.classList.toggle('dark', isDark);
+                    this.ui.elements.themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+
+                    // Editor theme and font size
+                    const editorTheme = this.state.get('editorTheme') || 'vs-dark';
+                    const fontSize = this.state.get('fontSize') || 14;
+                    this.ui.elements.themeSelector.value = editorTheme;
+                    this.ui.elements.fontSizeSlider.value = fontSize;
+                    this.ui.elements.fontSizeValue.textContent = fontSize;
+                    this.editorManager.updateOptions({ theme: editorTheme, fontSize: parseInt(fontSize) });
+
+                    // Layout (left panel width)
+                    const leftPanelWidth = this.state.get('leftPanelWidth');
+                    if(leftPanelWidth) this.ui.elements.leftPanel.style.width = leftPanelWidth;
+
+                    // Render execution history
+                    this.renderHistory();
+                    
+                    // Load last saved code for the currently selected language
+                    this.loadCode();
+                }
+
+                async executeCode() {
+                    const sourceCode = this.editorManager.editor.getValue();
+                    if (!sourceCode.trim()) {
+                        this.ui.showToast('Code editor is empty! Please write some code.', 'error');
+                        return;
+                    }
+
+                    this.ui.setLoading(this.ui.elements.runBtn, true);
+                    this.ui.updateOutputDetails({ status: 'Running...' });
+                    this.ui.elements.outputConsole.textContent = ''; // Clear previous output
+                    this.ui.switchTab('output-panel'); // Switch to output tab
+
+                    const langKey = this.ui.elements.languageSelector.value;
+                    const paizaId = this.config.languages[langKey].paizaId;
+                    const stdin = this.ui.elements.inputBox.value;
+
+                    try {
+                        const result = await this.apiClient.execute(paizaId, sourceCode, stdin);
+                        this.ui.displayOutput(result);
+                        const status = result.result === 'success' ? 'Success' : 'Failure';
+                        this.addToHistory(sourceCode, langKey, status);
+                    } catch (error) {
+                        console.error('Execution error:', error);
+                        this.ui.elements.outputConsole.textContent = `An error occurred: ${error.message}`;
+                        this.ui.updateOutputDetails({ status: 'Error', result: 'error' });
+                        this.ui.showToast(`Execution failed: ${error.message}`, 'error');
+                    } finally {
+                        this.ui.setLoading(this.ui.elements.runBtn, false);
+                    }
+                }
+                
+                handleLanguageChange() {
+                    const langKey = this.ui.elements.languageSelector.value;
+                    const savedCode = this.state.get(`codecraft_${langKey}`);
+                    const defaultCode = this.config.languages[langKey].defaultCode;
+                    // Change editor language and set content to saved code or default code
+                    this.editorManager.changeLanguage(langKey, savedCode || defaultCode);
+                    this.ui.showToast(`Language changed to ${this.config.languages[langKey].name}`, 'info');
+                }
+                
+                toggleAppTheme() {
+                    const isDark = document.documentElement.classList.toggle('dark');
+                    this.state.set('isDarkTheme', isDark);
+                    this.ui.elements.themeToggle.innerHTML = isDark ? '<i class="fas fa-sun"></i>' : '<i class="fas fa-moon"></i>';
+                    this.ui.showToast(`Theme switched to ${isDark ? 'Dark' : 'Light'}`, 'info');
+                }
+
+                handleThemeChange(e) {
+                    const theme = e.target.value;
+                    this.editorManager.updateOptions({ theme: theme });
+                    this.state.set('editorTheme', theme);
+                    this.ui.showToast(`Editor theme set to ${this.config.themes[theme]}`, 'success');
+                }
+
+                handleFontSizeChange(e) {
+                    const newSize = e.target.value;
+                    this.ui.elements.fontSizeValue.textContent = newSize;
+                    this.editorManager.updateOptions({ fontSize: parseInt(newSize) });
+                    this.state.set('fontSize', newSize);
+                }
+                
+                handleCodeChange() {
+                    this.saveCode(false); // Autosave without showing toast
+                }
+
+                saveCode(showToast = false) {
+                    const langKey = this.ui.elements.languageSelector.value;
+                    this.state.set(`codecraft_${langKey}`, this.editorManager.editor.getValue());
+                    if (showToast) {
+                        this.ui.showToast(`${this.config.languages[langKey].name} code saved to browser!`, 'success');
+                    }
+                }
+
+                loadCode() {
+                    const langKey = this.ui.elements.languageSelector.value;
+                    const savedCode = this.state.get(`codecraft_${langKey}`);
+                    if (savedCode) {
+                        this.editorManager.editor.setValue(savedCode);
+                        this.ui.showToast(`${this.config.languages[langKey].name} code loaded from browser storage.`, 'info');
+                    }
+                }
+                
+                loadFile(event) {
+                    const file = event.target.files[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        this.editorManager.editor.setValue(e.target.result);
+                        this.ui.showToast(`File "${file.name}" loaded successfully!`, 'success');
+                    };
+                    reader.onerror = () => {
+                        this.ui.showToast(`Error reading file "${file.name}".`, 'error');
+                    };
+                    reader.readAsText(file);
+                    event.target.value = ''; // Reset file input to allow re-uploading the same file
+                }
+
+                clearEditor() {
+                    this.showConfirmation(
+                        "Clear Editor?",
+                        "This will replace the current content with the default template for the selected language. Any unsaved changes will be lost.",
+                        () => {
+                            const langKey = this.ui.elements.languageSelector.value;
+                            this.editorManager.editor.setValue(this.config.languages[langKey].defaultCode);
+                            this.ui.elements.outputConsole.textContent = '';
+                            this.ui.elements.inputBox.value = '';
+                            this.ui.updateOutputDetails({ status: 'Idle' });
+                            this.ui.showToast('Editor cleared and reset to default code.', 'info');
+                        }
+                    );
+                }
+                
+                showConfirmation(title, message, onConfirm) {
+                    this.ui.elements.confirmTitle.textContent = title;
+                    this.ui.elements.confirmMessage.textContent = message;
+                    this.ui.toggleModal(this.ui.elements.confirmModal, true);
+
+                    const handleConfirm = () => {
+                        onConfirm();
+                        cleanup();
+                    };
+
+                    const cleanup = () => {
+                        this.ui.toggleModal(this.ui.elements.confirmModal, false);
+                        // Ensure listeners are removed to prevent multiple calls
+                        this.ui.elements.confirmOkBtn.removeEventListener('click', handleConfirm);
+                        this.ui.elements.confirmCancelBtn.removeEventListener('click', cleanup);
+                    };
+
+                    // Attach event listeners for confirmation buttons, using { once: true } for auto-removal
+                    this.ui.elements.confirmOkBtn.addEventListener('click', handleConfirm, { once: true });
+                    this.ui.elements.confirmCancelBtn.addEventListener('click', cleanup, { once: true });
+                }
+
+                copyCode() {
+                    const textArea = document.createElement("textarea");
+                    textArea.value = this.editorManager.editor.getValue();
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-9999px"; // Hide the textarea off-screen
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        this.ui.showToast('Code copied to clipboard!', 'success');
+                    } catch (err) {
+                        console.error('Failed to copy code:', err);
+                        this.ui.showToast('Failed to copy code. Please copy manually.', 'error');
+                    } finally {
+                        document.body.removeChild(textArea);
+                    }
+                }
+
+                shareCode() {
+                    const code = this.editorManager.editor.getValue();
+                    const lang = this.ui.elements.languageSelector.value;
+                    const input = this.ui.elements.inputBox.value;
+
+                    const data = { c: code, l: lang, i: input };
+                    const jsonString = JSON.stringify(data);
+                    // Encode the JSON string to be URL-safe (Base64)
+                    const compressed = this.ui.encodeForHtml(jsonString);
+
+                    // Construct the shareable URL
+                    const url = `${window.location.origin}${window.location.pathname}?share=${compressed}`;
+                    
+                    // Copy the URL to clipboard
+                    const textArea = document.createElement("textarea");
+                    textArea.value = url;
+                    textArea.style.position = "fixed";
+                    textArea.style.left = "-9999px"; // Hide the textarea off-screen
+                    document.body.appendChild(textArea);
+                    textArea.focus();
+                    textArea.select();
+                    try {
+                        document.execCommand('copy');
+                        this.ui.showToast('Shareable link copied to clipboard!', 'success');
+                    } catch (err) {
+                        console.error('Failed to copy share link:', err);
+                        this.ui.showToast('Failed to copy share link. Please copy manually from address bar.', 'error');
+                    } finally {
+                        document.body.removeChild(textArea);
+                    }
+                }
+
+                loadFromURL() {
+                    const params = new URLSearchParams(window.location.search);
+                    const sharedData = params.get('share');
+                    if (sharedData) {
+                        try {
+                            const jsonString = this.ui.decodeFromHtml(sharedData);
+                            const data = JSON.parse(jsonString);
+                            if (data.c && data.l && this.config.languages[data.l]) {
+                                this.ui.elements.languageSelector.value = data.l;
+                                this.editorManager.changeLanguage(data.l, data.c);
+                                this.ui.elements.inputBox.value = data.i || '';
+                                this.ui.showToast('Code loaded from share link!', 'info');
+                                // Clean up the URL to prevent reloading on refresh
+                                window.history.replaceState({}, document.title, window.location.pathname);
+                            } else {
+                                throw new Error("Invalid share data structure or unsupported language.");
+                            }
+                        } catch (e) {
+                            console.error("Failed to load from share link:", e);
+                            this.ui.showToast(`Could not load shared code: ${e.message || 'Invalid share link.'}`, 'error');
+                        }
+                    }
+                }
+
+                downloadCode() {
+                    const code = this.editorManager.editor.getValue();
+                    const langKey = this.ui.elements.languageSelector.value;
+                    const filename = `codecraft_code.${this.config.languages[langKey].extension}`;
+                    
+                    const blob = new Blob([code], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a); // Required for Firefox
+                    a.click();
+                    document.body.removeChild(a); // Clean up
+                    URL.revokeObjectURL(url); // Release the object URL
+                    this.ui.showToast(`Code downloaded as ${filename}`, 'success');
+                }
+
+                async toggleFullscreen() {
+                    try {
+                        if (!document.fullscreenElement) {
+                            // Request fullscreen on the whole app container
+                            await this.ui.elements.appContainer.requestFullscreen();
+                        } else {
+                            // Exit fullscreen
+                            if (document.exitFullscreen) await document.exitFullscreen();
+                        }
+                    } catch (err) {
+                        console.error("Fullscreen request failed:", err);
+                        this.ui.showToast('Fullscreen mode is not supported or allowed in this environment.', 'error');
+                    }
+                }
+
+                updateFullscreenIcon() {
+                    const icon = document.fullscreenElement ? 'fa-compress' : 'fa-expand';
+                    this.ui.elements.fullscreenBtn.innerHTML = `<i class="fas ${icon}"></i>`;
+                }
+
+                addToHistory(code, langKey, status) {
+                    const history = this.state.get('codecraft_history', 'local') || [];
+                    history.unshift({ code, langKey, status, time: new Date().toLocaleTimeString() });
+                    // Keep history limited to 20 entries
+                    if (history.length > 20) history.pop();
+                    this.state.set('codecraft_history', history, 'local');
+                    this.renderHistory(); // Re-render the history list after adding
+                }
+
+                clearHistory() {
+                    this.showConfirmation(
+                        "Clear History?",
+                        "This will permanently delete your execution history. This action cannot be undone.",
+                        () => {
+                            this.state.remove('codecraft_history', 'local');
+                            this.renderHistory(); // Re-render to show empty history
+                            this.ui.showToast('Execution history cleared.', 'info');
+                        }
+                    );
+                }
+
+                renderHistory() {
+                    const history = this.state.get('codecraft_history', 'local') || [];
+                    this.ui.renderHistory(history, this.config.languages);
+                }
+
+                loadFromHistory(event) {
+                    const target = event.target.closest('li');
+                    if (target) {
+                        const code = this.ui.decodeFromHtml(target.dataset.code);
+                        const lang = target.dataset.lang;
+                        // Set language selector and then update editor content
+                        this.ui.elements.languageSelector.value = lang;
+                        this.editorManager.changeLanguage(lang, code);
+                        this.ui.showToast('Loaded code from history.', 'info');
+                    }
+                }
+
+                startResize(e) {
+                    e.preventDefault(); // Prevent default browser drag behavior
+                    this.isResizing = true;
+                    this.ui.elements.resizeHandle.classList.add('resizing');
+                    document.body.style.cursor = 'col-resize'; // Change cursor while resizing
+                    document.addEventListener('mousemove', this.resize.bind(this));
+                    document.addEventListener('mouseup', this.stopResize.bind(this));
+                }
+
+                resize(e) {
+                    if (!this.isResizing) return;
+                    // Get main content area and its total width
+                    const mainContent = document.getElementById('main-content');
+                    const totalWidth = mainContent.offsetWidth;
+                    const leftPanelMinWidth = 300; // Minimum width for left panel
+                    const rightPanelMinWidth = 250; // Minimum width for right panel
+
+                    // Calculate new left panel width based on mouse position
+                    let leftPanelWidth = e.clientX - mainContent.getBoundingClientRect().left;
+                    
+                    // Apply minimum width constraints
+                    if (leftPanelWidth < leftPanelMinWidth) leftPanelWidth = leftPanelMinWidth;
+                    // Ensure right panel also has its minimum width
+                    if (totalWidth - leftPanelWidth < rightPanelMinWidth) leftPanelWidth = totalWidth - rightPanelMinWidth;
+
+                    // Apply the new width as a percentage to maintain responsiveness
+                    this.ui.elements.leftPanel.style.width = `${(leftPanelWidth / totalWidth) * 100}%`;
+                    // Ensure Monaco editor layout is updated after resize
+                    this.editorManager.editor.layout();
+                }
+
+                stopResize() {
+                    this.isResizing = false;
+                    this.ui.elements.resizeHandle.classList.remove('resizing');
+                    document.body.style.cursor = 'default'; // Reset cursor
+                    // Save the final width for persistence
+                    this.state.set('leftPanelWidth', this.ui.elements.leftPanel.style.width);
+                    // Remove event listeners
+                    document.removeEventListener('mousemove', this.resize.bind(this));
+                    document.removeEventListener('mouseup', this.stopResize.bind(this), { once: true });
+                }
+            }
+
+            // Initialize the application once the DOM is fully loaded
+            const codeCraftApp = new App();
+            codeCraftApp.init();
+        });
+    </script>
+</body>
+</html>
